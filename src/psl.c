@@ -38,6 +38,16 @@
 #       define GCC_VERSION_AT_LEAST(major, minor) 0
 #endif
 
+/* Must be defined before <sys/stat.h> */
+#if defined(_MSC_VER) || defined(__MINGW32__)
+# define USE_WIN32_LARGE_FILES
+# ifdef __MINGW32__
+#   ifndef _FILE_OFFSET_BITS
+#    define _FILE_OFFSET_BITS 64
+#   endif
+# endif
+#endif
+
 #include <sys/types.h>
 #include <sys/stat.h>
 
@@ -46,6 +56,21 @@
 # define WIN32_LEAN_AND_MEAN
 # endif
 # include <windows.h> /* for GetACP() */
+#endif
+
+#if defined(_WIN32)
+# ifdef USE_WIN32_LARGE_FILES
+#  define struct_stat  struct _stati64
+#  define func_sys_stat _stati64
+# else
+#  define struct_stat  struct _stat
+#  define func_sys_stat _stat
+# endif
+#endif
+
+#ifndef struct_stat
+# define struct_stat   struct stat
+# define func_sys_stat stat
 #endif
 
 #if defined(_MSC_VER) && ! defined(ssize_t)
@@ -1512,9 +1537,9 @@ const char *psl_builtin_filename(void)
  */
 int psl_builtin_outdated(void)
 {
-	struct stat st;
+	struct_stat st;
 
-	if (stat(_psl_filename, &st) == 0 && st.st_mtime > _psl_file_time)
+	if (func_sys_stat(_psl_filename, &st) == 0 && st.st_mtime > _psl_file_time)
 		return 1;
 
 	return 0;
@@ -1983,10 +2008,10 @@ out:
 /* if file is newer than the builtin data, insert it reverse sorted by mtime */
 static int insert_file(const char *fname, const char **psl_fname, time_t *psl_mtime, int n)
 {
-	struct stat st;
+	struct_stat st;
 	int it;
 
-	if (fname && *fname && stat(fname, &st) == 0 && st.st_mtime > _psl_file_time) {
+	if (fname && *fname && func_sys_stat(fname, &st) == 0 && st.st_mtime > _psl_file_time) {
 		/* add file name and mtime to end of array */
 		psl_fname[n] = fname;
 		psl_mtime[n++] = st.st_mtime;
